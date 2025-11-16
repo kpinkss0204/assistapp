@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -29,7 +32,6 @@ import com.example.assistapp.ui.WebViewScreenActivity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 시스템 바 영역을 Compose가 그릴 수 있게
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
@@ -44,6 +46,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen() {
     val context = LocalContext.current
     var selectedIndex by remember { mutableStateOf(0) }
+    var previousIndex by remember { mutableStateOf(0) }
 
     Scaffold(
         bottomBar = {
@@ -51,7 +54,10 @@ fun MainScreen() {
                 selectedIndex = selectedIndex,
                 onTabSelected = { index ->
                     when (index) {
-                        0 -> selectedIndex = 0
+                        0 -> {
+                            previousIndex = selectedIndex
+                            selectedIndex = 0
+                        }
                         1 -> {
                             context.startActivity(
                                 Intent(context, ScheduleSendScreenActivity::class.java)
@@ -74,10 +80,40 @@ fun MainScreen() {
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(Color.White)
-                .navigationBarsPadding() // 안전하게 시스템 바 영역 포함
+                .navigationBarsPadding()
         ) {
-            when (selectedIndex) {
-                0 -> LocationSharingWithCodeScreen()
+            // 페이지 전환 애니메이션
+            AnimatedContent(
+                targetState = selectedIndex,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        // 오른쪽에서 왼쪽으로 슬라이드
+                        slideInHorizontally(
+                            initialOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(300)) togetherWith
+                                slideOutHorizontally(
+                                    targetOffsetX = { fullWidth -> -fullWidth },
+                                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                                ) + fadeOut(animationSpec = tween(300))
+                    } else {
+                        // 왼쪽에서 오른쪽으로 슬라이드
+                        slideInHorizontally(
+                            initialOffsetX = { fullWidth -> -fullWidth },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(300)) togetherWith
+                                slideOutHorizontally(
+                                    targetOffsetX = { fullWidth -> fullWidth },
+                                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                                ) + fadeOut(animationSpec = tween(300))
+                    }
+                },
+                label = "page_transition"
+            ) { targetIndex ->
+                when (targetIndex) {
+                    0 -> LocationSharingWithCodeScreen()
+                    // 다른 페이지들은 별도 Activity로 처리
+                }
             }
         }
     }
@@ -91,9 +127,10 @@ fun BottomNavigationBar(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .navigationBarsPadding(), // 시스템 바 위로 올리기
-        shadowElevation = 1.dp,
-        color = Color(0xFFF9F9F9)
+            .navigationBarsPadding(),
+        shadowElevation = 8.dp,
+        color = Color(0xFFF9F9F9),
+        tonalElevation = 3.dp
     ) {
         Row(
             modifier = Modifier
@@ -134,18 +171,33 @@ fun RowScope.BottomNavItem(
     val selectedColor = Color(0xFF000000)
     val unselectedColor = Color(0xFF888888)
 
+    // 선택 시 크기 애니메이션
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.1f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "icon_scale"
+    )
+
     Column(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .clickable(onClick = onClick),
+            .clickable(
+                onClick = onClick,
+                indication = null,
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier
+                .size((26 * scale).dp),
             tint = if (selected) selectedColor else unselectedColor
         )
         Spacer(modifier = Modifier.height(2.dp))
