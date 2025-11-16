@@ -1,142 +1,158 @@
 package com.example.assistapp
 
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Bundle
-import android.speech.tts.TextToSpeech
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.widget.PopupMenu
-import androidx.appcompat.app.AppCompatActivity
-import com.example.assistapp.databinding.ActivityMainBinding
-import com.example.assistapp.features.LocationSharing.LocationSharingWithCodeActivity
-import com.example.assistapp.features.ScheduleSharing.ScheduleSendScreenActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.assistapp.features.LocationSharing.LocationSharingWithCodeScreen
+import com.example.assistapp.features.Schedule.ScheduleSendScreenActivity
 import com.example.assistapp.ui.WebViewScreenActivity
-import java.util.*
 
-class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
-
-    private lateinit var binding: ActivityMainBinding
-    private lateinit var tts: TextToSpeech
-    private lateinit var gestureDetector: GestureDetector
-    private lateinit var prefs: SharedPreferences
-    private var currentScreen = 0
-    private var screens = mutableListOf("메인화면")
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        prefs = getSharedPreferences("settings", MODE_PRIVATE)
-        tts = TextToSpeech(this, this)
-        gestureDetector = GestureDetector(this, GestureListener())
-
-        loadActiveFeatures()
-        speakCurrent()
-
-        // 오른쪽 상단 기능 관리 버튼
-        binding.btnManageFeatures.setOnClickListener {
-            startActivity(Intent(this, FeatureManagerActivity::class.java))
+        setContent {
+            MaterialTheme {
+                MainScreen()
+            }
         }
+    }
+}
 
-        // 왼쪽 상단 메뉴 버튼
-        binding.btnMenu.setOnClickListener { view ->
-            val popup = PopupMenu(this, view)
-            Screen.values().forEach { screen ->
-                // ScheduleList는 메뉴에 표시하지 않음
-                if (screen != Screen.ScheduleList) {
-                    popup.menu.add("${screen.icon} ${screen.title}")
+@Composable
+fun MainScreen() {
+    val context = LocalContext.current
+    var selectedIndex by remember { mutableStateOf(0) }
+
+    // Activity가 다시 포그라운드로 올 때 탭을 위치로 리셋
+    DisposableEffect(Unit) {
+        onDispose { }
+    }
+
+    Scaffold(
+        bottomBar = {
+            BottomNavigationBar(
+                selectedIndex = selectedIndex,
+                onTabSelected = { index ->
+                    when (index) {
+                        0 -> selectedIndex = 0
+                        1 -> {
+                            context.startActivity(
+                                Intent(context, ScheduleSendScreenActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            )
+                        }
+                        2 -> {
+                            context.startActivity(
+                                Intent(context, WebViewScreenActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            )
+                        }
+                    }
                 }
+            )
+        }
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(Color.White)
+        ) {
+            when (selectedIndex) {
+                0 -> LocationSharingWithCodeScreen()
             }
-
-            popup.setOnMenuItemClickListener { item ->
-                when (item.title.toString()) {
-                    "${Screen.LocationSharing.icon} ${Screen.LocationSharing.title}" ->
-                        startActivity(Intent(this, LocationSharingWithCodeActivity::class.java))
-
-                    "${Screen.WebView.icon} ${Screen.WebView.title}" ->
-                        startActivity(Intent(this, WebViewScreenActivity::class.java))
-
-                    "${Screen.ScheduleSend.icon} ${Screen.ScheduleSend.title}" ->
-                        startActivity(Intent(this, ScheduleSendScreenActivity::class.java))
-                }
-                true
-            }
-            popup.show()
         }
     }
+}
 
-    override fun onResume() {
-        super.onResume()
-        loadActiveFeatures()
-        speakCurrent()
-    }
-
-    private fun loadActiveFeatures() {
-        val activeSet = prefs.getStringSet("activeFeatures", setOf("1", "2", "3"))!!
-        screens = mutableListOf("메인화면")
-        for (i in activeSet.sorted()) {
-            screens.add("기능 $i")
+@Composable
+fun BottomNavigationBar(
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shadowElevation = 1.dp,
+        color = Color(0xFFF9F9F9)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BottomNavItem(
+                icon = Icons.Default.LocationOn,
+                label = "위치",
+                selected = selectedIndex == 0,
+                onClick = { onTabSelected(0) }
+            )
+            BottomNavItem(
+                icon = Icons.Default.DateRange,
+                label = "일정",
+                selected = selectedIndex == 1,
+                onClick = { onTabSelected(1) }
+            )
+            BottomNavItem(
+                icon = Icons.Default.Home,
+                label = "웹",
+                selected = selectedIndex == 2,
+                onClick = { onTabSelected(2) }
+            )
         }
     }
+}
 
-    override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) tts.language = Locale.KOREAN
-    }
+@Composable
+fun RowScope.BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val selectedColor = Color(0xFF000000)
+    val unselectedColor = Color(0xFF888888)
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        gestureDetector.onTouchEvent(event)
-        return true
-    }
-
-    private inner class GestureListener : GestureDetector.SimpleOnGestureListener() {
-        private val SWIPE_THRESHOLD = 100
-        private val SWIPE_VELOCITY_THRESHOLD = 100
-
-        override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-            if (e1 == null || e2 == null) return false
-            val diffX = e2.x - e1.x
-            if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
-                if (diffX > 0) movePrev() else moveNext()
-                return true
-            }
-            return false
-        }
-
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            onDoubleTapAction()
-            return true
-        }
-    }
-
-    private fun moveNext() {
-        currentScreen = (currentScreen + 1) % screens.size
-        speakCurrent()
-    }
-
-    private fun movePrev() {
-        currentScreen = if (currentScreen - 1 < 0) screens.size - 1 else currentScreen - 1
-        speakCurrent()
-    }
-
-    private fun speakCurrent() {
-        val msg = "${screens[currentScreen]}입니다. 더블탭하면 실행합니다."
-        binding.textView.text = msg
-        tts.speak(msg, TextToSpeech.QUEUE_FLUSH, null, null)
-    }
-
-    private fun onDoubleTapAction() {
-        when (screens[currentScreen]) {
-            "기능 1" -> startActivity(Intent(this, Feature1Activity::class.java))
-            "기능 2" -> startActivity(Intent(this, Feature2Activity::class.java))
-            "기능 3" -> startActivity(Intent(this, Feature3Activity::class.java))
-        }
-    }
-
-    override fun onDestroy() {
-        tts.stop()
-        tts.shutdown()
-        super.onDestroy()
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(26.dp),
+            tint = if (selected) selectedColor else unselectedColor
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) selectedColor else unselectedColor
+        )
     }
 }

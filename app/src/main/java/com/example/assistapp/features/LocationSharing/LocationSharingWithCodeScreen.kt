@@ -77,6 +77,7 @@ fun LocationSharingWithCodeScreen(
         }
     }
 
+
     // 최초 암호 생성 및 Firestore 저장
     LaunchedEffect(Unit) {
         if (generatedKey.isEmpty()) {
