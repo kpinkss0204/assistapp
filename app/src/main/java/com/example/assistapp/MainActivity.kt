@@ -4,14 +4,13 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import com.example.assistapp.features.LocationSharing.LocationSharingWithCodeScreen
 import com.example.assistapp.features.Schedule.ScheduleSendScreenActivity
 import com.example.assistapp.ui.WebViewScreenActivity
@@ -29,6 +29,9 @@ import com.example.assistapp.ui.WebViewScreenActivity
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 시스템 바 영역을 Compose가 그릴 수 있게
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         setContent {
             MaterialTheme {
                 MainScreen()
@@ -41,11 +44,6 @@ class MainActivity : ComponentActivity() {
 fun MainScreen() {
     val context = LocalContext.current
     var selectedIndex by remember { mutableStateOf(0) }
-
-    // Activity가 다시 포그라운드로 올 때 탭을 위치로 리셋
-    DisposableEffect(Unit) {
-        onDispose { }
-    }
 
     Scaffold(
         bottomBar = {
@@ -76,6 +74,7 @@ fun MainScreen() {
                 .fillMaxSize()
                 .padding(paddingValues)
                 .background(Color.White)
+                .navigationBarsPadding() // 안전하게 시스템 바 영역 포함
         ) {
             when (selectedIndex) {
                 0 -> LocationSharingWithCodeScreen()
@@ -90,7 +89,9 @@ fun BottomNavigationBar(
     onTabSelected: (Int) -> Unit
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(), // 시스템 바 위로 올리기
         shadowElevation = 1.dp,
         color = Color(0xFFF9F9F9)
     ) {

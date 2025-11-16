@@ -45,23 +45,6 @@ fun ScheduleSendScreen() {
             Text("📤 일정 보내기", style = MaterialTheme.typography.titleLarge)
         }
 
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "내 암호코드",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        generatedKey.ifEmpty { "(생성 안됨)" },
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
-        }
-
         item { HorizontalDivider() }
 
         item {

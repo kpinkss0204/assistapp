@@ -1,11 +1,8 @@
 package com.example.assistapp.features.LocationSharing
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -42,7 +39,6 @@ fun LocationSharingWithCodeScreen(
         mutableStateOf(sharedPreferences.getString("generated_key", "") ?: "")
     }
     var hasLocationPermission by remember { mutableStateOf(false) }
-    var hasNotificationPermission by remember { mutableStateOf(true) }
     var partnerKeyToWatch by remember { mutableStateOf<String?>(null) }
     var isBeingTracked by remember { mutableStateOf(false) }
     var isServiceRunning by remember { mutableStateOf(false) }
@@ -54,12 +50,6 @@ fun LocationSharingWithCodeScreen(
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
     }
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasNotificationPermission = isGranted
-    }
-
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // 권한 체크
@@ -68,15 +58,7 @@ fun LocationSharingWithCodeScreen(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            hasNotificationPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        }
     }
-
 
     // 최초 암호 생성 및 Firestore 저장
     LaunchedEffect(Unit) {
@@ -99,7 +81,7 @@ fun LocationSharingWithCodeScreen(
                 .document(docId)
                 .set(data)
                 .addOnSuccessListener {
-                    android.util.Log.d("LocationSharing", "✅ 저장 성공 - 원본: $newKey, 문서ID: $docId")
+                    android.util.Log.d("LocationSharing", "✅ 저장 성공 - 문서ID: $docId")
                 }
                 .addOnFailureListener { exception ->
                     android.util.Log.e("LocationSharing", "❌ 저장 실패", exception)
@@ -109,7 +91,7 @@ fun LocationSharingWithCodeScreen(
     }
 
     // Firebase tracking_requests 감시
-    DisposableEffect(generatedKey, hasLocationPermission, hasNotificationPermission) {
+    DisposableEffect(generatedKey, hasLocationPermission) {
         if (generatedKey.isEmpty()) return@DisposableEffect onDispose {}
 
         val trackingRequestRef = FirebaseDatabase.getInstance()
@@ -123,10 +105,6 @@ fun LocationSharingWithCodeScreen(
                 if (isBeingTracked && !wasTracked) {
                     if (!hasLocationPermission) {
                         Toast.makeText(context, "위치 권한 필요", Toast.LENGTH_SHORT).show()
-                        return
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
-                        Toast.makeText(context, "알림 권한 필요", Toast.LENGTH_SHORT).show()
                         return
                     }
 
@@ -216,39 +194,6 @@ fun LocationSharingWithCodeScreen(
                     }
                 }
             }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("⚠️ 알림 권한 필요 (백그라운드)", color = MaterialTheme.colorScheme.onErrorContainer)
-                        Spacer(Modifier.height(8.dp))
-                        Button(onClick = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }) { Text("알림 권한 요청") }
-                    }
-                }
-            }
-        }
-
-        // 내 코드 표시
-        item {
-            Card {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("내 고유 암호코드")
-                    Spacer(Modifier.height(4.dp))
-                    Text(if (generatedKey.isNotEmpty()) generatedKey else "(생성 중...)", color = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.height(8.dp))
-                    Text("상대방에게 공유하세요", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-
-        item {
-            Button(onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("암호코드", generatedKey))
-                Toast.makeText(context, "클립보드 복사 완료", Toast.LENGTH_SHORT).show()
-            }, modifier = Modifier.fillMaxWidth(), enabled = generatedKey.isNotEmpty()) { Text("📋 복사") }
         }
 
         if (isServiceRunning) {
