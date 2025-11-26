@@ -20,7 +20,6 @@ import com.example.assistapp.ui.components.KakaoMapViewCompose
 import com.google.firebase.database.*
 import java.security.MessageDigest
 
-// 입력된 암호를 SHA-256 해시로 변환
 fun toSafeDbKey(input: String): String {
     val hashBytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
     return hashBytes.joinToString("") { "%02x".format(it) }
@@ -39,7 +38,6 @@ fun LocationSharingWithCodeScreen(
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // 위치 권한 요청
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -50,7 +48,6 @@ fun LocationSharingWithCodeScreen(
         }
     }
 
-    // 권한 체크
     LaunchedEffect(Unit) {
         val hasPermission = ContextCompat.checkSelfPermission(
             context,
@@ -92,17 +89,33 @@ fun LocationSharingWithCodeScreen(
         }
     }
 
-    // Lifecycle 정리
+    // 화면 이탈 시 tracking_requests 삭제
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP || event == Lifecycle.Event.ON_PAUSE) {
+                partnerKeyToWatch?.let { watchKey ->
+                    FirebaseDatabase.getInstance()
+                        .reference.child("tracking_requests")
+                        .child(watchKey)
+                        .removeValue()
+                }
+
                 partnerKeyToWatch = null
                 partnerLocation = null
                 inputKey = ""
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+
+            partnerKeyToWatch?.let { watchKey ->
+                FirebaseDatabase.getInstance()
+                    .reference.child("tracking_requests")
+                    .child(watchKey)
+                    .removeValue()
+            }
+        }
     }
 
     // UI
@@ -114,43 +127,61 @@ fun LocationSharingWithCodeScreen(
     ) {
         item { Text("📍 상대방 위치 추적", style = MaterialTheme.typography.titleMedium) }
 
-        // 암호 입력
         item {
             OutlinedTextField(
                 value = inputKey,
                 onValueChange = { inputKey = it },
                 label = { Text("상대방 암호 입력") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                enabled = partnerKeyToWatch == null
             )
         }
 
-        // 추적 시작 버튼
         item {
             Button(
                 onClick = {
                     if (inputKey.isNotEmpty()) {
-                        partnerKeyToWatch = toSafeDbKey(inputKey.trim())
-                        Toast.makeText(context, "✅ 추적 시작", Toast.LENGTH_SHORT).show()
+                        val safeKey = toSafeDbKey(inputKey.trim())
+                        val trackingRequestRef = FirebaseDatabase.getInstance()
+                            .reference.child("tracking_requests").child(safeKey)
+
+                        trackingRequestRef.setValue(true)
+                            .addOnSuccessListener {
+                                partnerKeyToWatch = safeKey
+                                Toast.makeText(context, "✅ 추적 시작", Toast.LENGTH_SHORT).show()
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "추적 시작 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
                     } else {
                         Toast.makeText(context, "암호를 입력해주세요.", Toast.LENGTH_SHORT).show()
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = partnerKeyToWatch == null && inputKey.isNotEmpty()
             ) {
                 Text("🔍 추적 시작")
             }
         }
 
-        // 추적 중단 버튼 및 위치 표시
         if (partnerKeyToWatch != null) {
             item {
                 OutlinedButton(
                     onClick = {
-                        partnerKeyToWatch = null
-                        partnerLocation = null
-                        inputKey = ""
-                        Toast.makeText(context, "추적 중단", Toast.LENGTH_SHORT).show()
+                        val watchKey = partnerKeyToWatch
+                        if (watchKey != null) {
+                            val trackingRequestRef = FirebaseDatabase.getInstance()
+                                .reference.child("tracking_requests").child(watchKey)
+
+                            trackingRequestRef.removeValue()
+                                .addOnSuccessListener {
+                                    partnerKeyToWatch = null
+                                    partnerLocation = null
+                                    inputKey = ""
+                                    Toast.makeText(context, "추적 중단", Toast.LENGTH_SHORT).show()
+                                }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
@@ -163,9 +194,7 @@ fun LocationSharingWithCodeScreen(
             item { Text("👥 상대방 위치 추적 중") }
 
             if (partnerLocation != null) {
-                item {
-                    Text("위도: ${partnerLocation!!.first}, 경도: ${partnerLocation!!.second}")
-                }
+                item { Text("위도: ${partnerLocation!!.first}, 경도: ${partnerLocation!!.second}") }
                 item {
                     KakaoMapViewCompose(
                         lat = partnerLocation!!.first,
