@@ -4,6 +4,8 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -13,11 +15,8 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.text.ifEmpty
-import kotlin.text.isEmpty
-import kotlin.text.isNotEmpty
-import kotlin.to
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleSendScreen() {
     val context = LocalContext.current
@@ -31,7 +30,7 @@ fun ScheduleSendScreen() {
 
     var inputKey by remember { mutableStateOf("") }
     var title by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf("") }
+    var selectedDateMillis by remember { mutableStateOf<Long?>(null) }   // ✅ 변경됨
     var time by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
 
@@ -74,18 +73,11 @@ fun ScheduleSendScreen() {
             )
         }
 
+        // ✅ ✅ ✅ 날짜 선택 (캘린더)
         item {
-            OutlinedTextField(
-                value = date,
-                onValueChange = { date = it },
-                label = { Text("날짜 (YYYY-MM-DD)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                enabled = !isSending,
-                placeholder = { Text("예: 2025-11-05") },
-                supportingText = {
-                    Text("오늘 날짜: ${getCurrentDate()}")
-                }
+            CalendarDatePicker(
+                selectedDate = selectedDateMillis,
+                onDateSelected = { selectedDateMillis = it }
             )
         }
 
@@ -104,35 +96,32 @@ fun ScheduleSendScreen() {
         item {
             Button(
                 onClick = {
-                    // 유효성 검사
+                    // ✅ 유효성 검사
                     if (inputKey.isEmpty()) {
                         Toast.makeText(context, "상대방 암호코드를 입력하세요", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
+
                     if (title.isEmpty()) {
                         Toast.makeText(context, "일정 제목을 입력하세요", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
-                    if (date.isEmpty()) {
-                        Toast.makeText(context, "날짜를 입력하세요", Toast.LENGTH_SHORT).show()
+
+                    if (selectedDateMillis == null) {
+                        Toast.makeText(context, "날짜를 선택하세요", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
 
-                    // 날짜 형식 검증
-                    if (!isValidDateFormat(date)) {
-                        Toast.makeText(context, "날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-
-                    // 시간 형식 검증 (입력된 경우에만)
                     if (time.isNotEmpty() && !isValidTimeFormat(time)) {
                         Toast.makeText(context, "시간 형식이 올바르지 않습니다 (HH:MM)", Toast.LENGTH_SHORT).show()
                         return@Button
                     }
 
-                    // 과거 날짜 체크
-                    val dateTimeString = if (time.isNotEmpty()) "$date $time" else "$date 00:00"
-                    if (isPastDateTime(dateTimeString, time.isNotEmpty())) {
+                    val formattedDate = formatDate(selectedDateMillis!!)
+                    val dateTimeString =
+                        if (time.isNotEmpty()) "$formattedDate $time" else "$formattedDate 00:00"
+
+                    if (isPastDateTime(dateTimeString)) {
                         Toast.makeText(context, "⚠️ 과거 날짜/시간은 등록할 수 없습니다", Toast.LENGTH_LONG).show()
                         return@Button
                     }
@@ -141,7 +130,7 @@ fun ScheduleSendScreen() {
 
                     val newSchedule = mapOf(
                         "title" to title,
-                        "date" to date,
+                        "date" to formattedDate,
                         "time" to time,
                         "createdAt" to Timestamp.now(),
                         "senderKey" to generatedKey
@@ -154,14 +143,17 @@ fun ScheduleSendScreen() {
                         .addOnSuccessListener {
                             isSending = false
                             Toast.makeText(context, "✅ 일정이 공유되었습니다!", Toast.LENGTH_SHORT).show()
-                            // 입력 필드 초기화
                             title = ""
-                            date = ""
+                            selectedDateMillis = null
                             time = ""
                         }
                         .addOnFailureListener { exception ->
                             isSending = false
-                            Toast.makeText(context, "❌ 전송 실패: ${exception.message}", Toast.LENGTH_LONG).show()
+                            Toast.makeText(
+                                context,
+                                "❌ 전송 실패: ${exception.message}",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -187,17 +179,15 @@ fun ScheduleSendScreen() {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
                         "💡 사용 방법",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.titleSmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "1. 상대방의 암호코드를 입력하세요\n" +
-                                "2. 일정 제목과 날짜를 입력하세요\n" +
+                                "2. 일정 제목과 날짜를 선택하세요\n" +
                                 "3. 시간은 선택사항입니다\n" +
                                 "4. 과거 날짜/시간은 등록할 수 없습니다",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
@@ -205,43 +195,72 @@ fun ScheduleSendScreen() {
     }
 }
 
-// 현재 날짜 반환
-fun getCurrentDate(): String {
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CalendarDatePicker(
+    selectedDate: Long?,
+    onDateSelected: (Long) -> Unit
+) {
+    var showDialog by remember { mutableStateOf(false) }
+
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = selectedDate
+    )
+
+    Column {
+        OutlinedButton(
+            onClick = { showDialog = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.DateRange, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = if (selectedDate == null)
+                    "📅 날짜 선택"
+                else
+                    formatDate(selectedDate)
+            )
+        }
+
+        if (showDialog) {
+            DatePickerDialog(
+                onDismissRequest = { showDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let {
+                            onDateSelected(it)
+                        }
+                        showDialog = false
+                    }) { Text("확인") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDialog = false }) { Text("취소") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+    }
+}
+
+// ✅ 날짜 포맷
+fun formatDate(timeMillis: Long): String {
     val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    return sdf.format(Date())
+    return sdf.format(Date(timeMillis))
 }
 
-// 날짜 형식 검증 (YYYY-MM-DD)
-fun isValidDateFormat(date: String): Boolean {
-    return try {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        sdf.isLenient = false
-        sdf.parse(date)
-        true
-    } catch (e: Exception) {
-        false
-    }
-}
-
-// 시간 형식 검증 (HH:MM)
+// ✅ 시간 형식 검증
 fun isValidTimeFormat(time: String): Boolean {
-    return try {
-        val regex = Regex("^([0-1][0-9]|2[0-3]):[0-5][0-9]$")
-        regex.matches(time)
-    } catch (e: Exception) {
-        false
-    }
+    val regex = Regex("^([0-1][0-9]|2[0-3]):[0-5][0-9]$")
+    return regex.matches(time)
 }
 
-// 과거 날짜/시간 체크
-fun isPastDateTime(dateTimeString: String, hasTime: Boolean): Boolean {
+// ✅ 과거 날짜 체크
+fun isPastDateTime(dateTimeString: String): Boolean {
     return try {
-        val format = if (hasTime) "yyyy-MM-dd HH:mm" else "yyyy-MM-dd HH:mm"
-        val sdf = SimpleDateFormat(format, Locale.getDefault())
+        val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         val inputDate = sdf.parse(dateTimeString) ?: return false
-        val now = Date()
-
-        inputDate.before(now)
+        inputDate.before(Date())
     } catch (e: Exception) {
         false
     }
