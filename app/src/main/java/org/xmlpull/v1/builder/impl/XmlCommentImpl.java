@@ -1,0 +1,28 @@
+package org.xmlpull.v1.builder.impl;
+
+import org.xmlpull.v1.builder.XmlComment;
+import org.xmlpull.v1.builder.XmlContainer;
+
+/* JADX INFO: loaded from: classes4.dex */
+public class XmlCommentImpl implements XmlComment {
+    private String content_;
+    private XmlContainer owner_;
+
+    XmlCommentImpl(XmlContainer xmlContainer, String str) {
+        this.owner_ = xmlContainer;
+        this.content_ = str;
+        if (str == null) {
+            throw new IllegalArgumentException("comment content can not be null");
+        }
+    }
+
+    @Override // org.xmlpull.v1.builder.XmlComment
+    public String getContent() {
+        return this.content_;
+    }
+
+    @Override // org.xmlpull.v1.builder.XmlComment
+    public XmlContainer getParent() {
+        return this.owner_;
+    }
+}
